@@ -63,3 +63,13 @@ deploy/langfuse_standalone/pgdata/
 deploy/langfuse_standalone/clickhouse/
 knowledge/
 brain/
+
+# Docker Volumes
+volumes/
+/volumes/
+**/volumes/*
+data/
+/data/
+**/data/*
+.git
+
