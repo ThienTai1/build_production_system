@@ -1,0 +1,112 @@
+# =============================================================================
+# LEARNING SYSTEM - PRODUCTION DOCKER COMPOSE
+# =============================================================================
+# Cấu hình này dành cho môi trường Production, bao gồm cả AI Agent và Hạ tầng.
+# Mọi tham số đều được tối ưu hóa về tài nguyên và bảo mật.
+# =============================================================================
+
+version: '3.9'
+
+services:
+  # ---------------------------------------------------------------------------
+  # AI AGENT - BACKEND (FastAPI + LangGraph)
+  # ---------------------------------------------------------------------------
+  backend:
+    build: ./backend
+    container_name: agent-backend
+    restart: always # Tự động khởi động lại nếu crash
+    networks:
+      - monitoring
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./backend/.env
+    # Giới hạn tài nguyên để tránh chiếm dụng toàn bộ server
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    depends_on:
+      milvus_standalone:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # AI AGENT - FRONTEND (Next.js Standalone)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build: ./frontend
+    container_name: agent-frontend
+    restart: always
+    networks:
+      - monitoring
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://your-domain.com/api # Thay đổi theo domain thật
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # VECTOR DATABASE - MILVUS (Core of RAG)
+  # ---------------------------------------------------------------------------
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: etcd-prod
+    networks:
+      - monitoring
+    volumes:
+      - ./volumes/etcd:/etcd
+    command: etcd --advertise-client-urls http://127.0.0.1:2379 --listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: minio-prod
+    networks:
+      - monitoring
+    volumes:
+      - ./volumes/minio:/data
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus_standalone:
+    image: milvusdb/milvus:v2.5.4
+    container_name: milvus-prod
+    command: ["milvus", "run", "standalone"]
+    networks:
+      - monitoring
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - ./volumes/milvus:/var/lib/milvus
+    ports:
+      - "19530:19530"
+    depends_on:
+      - etcd
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  etcd:
+  minio:
+  milvus:
