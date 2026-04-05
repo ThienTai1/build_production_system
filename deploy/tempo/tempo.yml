@@ -1,0 +1,70 @@
+# =============================================================================
+# Grafana Tempo Configuration (v2.6.1 - Monolithic Mode)
+# =============================================================================
+# Tempo là hệ thống lưu trữ và truy vấn Distributed Traces.
+# File này cấu hình Tempo chạy ở chế độ "monolithic" (đơn khối),
+# tức tất cả các thành phần (distributor, ingester, compactor, querier)
+# chạy trong cùng một process. Phù hợp cho môi trường phát triển.
+# =============================================================================
+
+# --- Server ---
+# Cấu hình HTTP server của Tempo.
+# Grafana sẽ kết nối tới cổng này để truy vấn traces.
+server:
+  http_listen_port: 3200               # Grafana Datasource URL: http://tempo:3200
+
+# --- Distributor ---
+# Thành phần đầu tiên nhận dữ liệu trace từ bên ngoài.
+# Nó nhận spans qua giao thức OTLP (OpenTelemetry Protocol)
+# rồi chuyển tiếp cho Ingester xử lý.
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317       # OTel Collector gửi traces qua gRPC tới đây
+        http:
+          endpoint: 0.0.0.0:4318       # Hoặc qua HTTP tới đây
+
+# --- Ingester ---
+# Thành phần xử lý và ghi dữ liệu trace vào bộ nhớ tạm (WAL)
+# trước khi flush xuống storage backend.
+ingester:
+  trace_idle_period: 10s               # Sau 10s không nhận span mới -> đóng trace
+  max_block_duration: 5m               # Cứ 5 phút flush một block xuống storage
+
+# --- Metrics Generator ---
+# Tạo metrics (RED: Rate, Error, Duration) từ traces.
+# Cần thiết cho trang Drilldown trong Grafana.
+# Dữ liệu metrics được gửi tới Prometheus qua remote_write.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo                    # Label đánh dấu metrics đến từ Tempo
+      cluster: docker-compose          # Label cluster (local dev)
+  storage:
+    path: /var/tempo/generator/wal     # WAL riêng cho metrics generator
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write  # Gửi metrics tới Prometheus
+        send_exemplars: true           # Gửi kèm exemplar (liên kết metric ↔ trace)
+
+# --- Storage ---
+# Cấu hình nơi lưu trữ dữ liệu traces.
+# Ở đây dùng "local" (ổ đĩa cục bộ).
+# Trên Production nên dùng S3/GCS/MinIO.
+storage:
+  trace:
+    backend: local                     # Lưu trên ổ đĩa (Docker volume: tempo-data)
+    local:
+      path: /var/tempo/blocks          # Thư mục chứa các block trace đã hoàn thành
+    wal:
+      path: /var/tempo/wal             # Write-Ahead Log: buffer tạm trước khi ghi block
+
+# --- Overrides ---
+# Bật các processor cho metrics_generator ở trên.
+# - service-graphs: tạo biểu đồ quan hệ giữa các service
+# - span-metrics: tạo metrics RED từ spans
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
