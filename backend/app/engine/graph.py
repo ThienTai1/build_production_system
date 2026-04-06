@@ -15,12 +15,19 @@ class AgentState(TypedDict):
     documents: List[str]
     generation: str
 
-# Khởi tạo Gemma 2 qua Ollama dựa trên Settings
-llm = ChatOllama(
-    model=settings.LLM_MODEL,
-    base_url=settings.OLLAMA_BASE_URL,
-    temperature=0
-)
+# --- KHỞI TẠO LLM DỰA TRÊN CẤU HÌNH ---
+def get_llm():
+    if settings.LLM_PROVIDER == "openai" and settings.OPENAI_API_KEY:
+        logger.info("Using OpenAI GPT Engine")
+        return ChatOpenAI(model=settings.LLM_MODEL, api_key=settings.OPENAI_API_KEY)
+    elif settings.LLM_PROVIDER == "groq" and settings.GROQ_API_KEY:
+        logger.info(f"Using Groq Engine with model: {settings.LLM_MODEL}")
+        return ChatGroq(model=settings.LLM_MODEL, api_key=settings.GROQ_API_KEY)
+    else:
+        logger.info(f"Using Local Ollama Engine: {settings.LLM_MODEL}")
+        return ChatOllama(model=settings.LLM_MODEL, base_url=settings.OLLAMA_BASE_URL)
+
+llm = get_llm()
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker

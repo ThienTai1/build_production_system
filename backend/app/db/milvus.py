@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 from langchain_milvus import Milvus, BM25BuiltInFunction
+from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 from pymilvus import MilvusClient, connections
 from app.core.config import settings
@@ -9,16 +10,23 @@ logger = logging.getLogger(__name__)
 
 class VectorStoreManager:
     _instance: Optional[Milvus] = None
-    _embeddings: Optional[OllamaEmbeddings] = None
+    _embeddings: Optional[object] = None
 
     @classmethod
-    def get_embeddings(cls) -> OllamaEmbeddings:
+    def get_embeddings(cls) -> object:
         if cls._embeddings is None:
-            logger.info("Initializing Ollama Embeddings...")
-            cls._embeddings = OllamaEmbeddings(
-                model=settings.EMBED_MODEL,
-                base_url=settings.OLLAMA_BASE_URL
-            )
+            if settings.LLM_PROVIDER == "openai" and settings.OPENAI_API_KEY:
+                logger.info("Initializing OpenAI Embeddings...")
+                cls._embeddings = OpenAIEmbeddings(
+                    model="text-embedding-3-small",
+                    api_key=settings.OPENAI_API_KEY
+                )
+            else:
+                logger.info("Initializing Ollama Embeddings...")
+                cls._embeddings = OllamaEmbeddings(
+                    model=settings.EMBED_MODEL,
+                    base_url=settings.OLLAMA_BASE_URL
+                )
         return cls._embeddings
 
     @classmethod

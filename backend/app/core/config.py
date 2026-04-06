@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # LLM Settings
+    # Provider: 'ollama', 'openai', or 'groq'
+    LLM_PROVIDER: str = "ollama"
+    OPENAI_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
     LLM_MODEL: str = "gemma4"
     OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     
